@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Plataforma UNAM - Reproducción</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body { font-family: Arial; margin:0; background:#f4f6f9;}
+header { background:#003366; color:white; padding:15px; text-align:center;}
+.container { display:flex; }
+.sidebar { width:220px; background:#e6ecf2; height:100vh; padding:10px; overflow-y:auto;}
+.sidebar button { width:45px; margin:5px; padding:10px; border:none; background:#ccc;}
+.sidebar button.contestada { background:#4CAF50; color:white;}
+.main { flex:1; padding:20px;}
+.timer { position:fixed; top:10px; right:20px; background:red; color:white; padding:10px;}
+.hidden { display:none;}
+table { border-collapse:collapse; width:100%; margin-top:20px;}
+th,td { border:1px solid #ccc; padding:8px;}
+.correcta { color:green;}
+.incorrecta { color:red;}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>Simulador UNAM - Reproducción</h2>
+</header>
+
+<div style="padding:20px;">
+<button onclick="vista('inicio')">Examen</button>
+<button onclick="vista('panel')">Panel Profesor</button>
+</div>
+
+<div id="inicio" style="padding:20px;">
+Nombre: <input id="nombre"><br><br>
+Cuenta: <input id="cuenta"><br><br>
+<button onclick="iniciar()">Entrar</button>
+</div>
+
+<div id="examen" class="hidden">
+<div class="timer">Tiempo total: <span id="tiempo"></span></div>
+
+<div class="container">
+<div class="sidebar" id="nav"></div>
+
+<div class="main">
+<h3 id="pregunta"></h3>
+<p><b>Tiempo en esta pregunta:</b> <span id="tiempoPregunta">0</span> s</p>
+<div id="opciones"></div>
+
+<button onclick="ant()">Anterior</button>
+<button onclick="sig()">Siguiente</button>
+<br>
+<button onclick="terminar()">Finalizar</button>
+</div>
+</div>
+</div>
+
+<div id="resultado" class="hidden" style="padding:20px;">
+<h2>Resultado</h2>
+<p id="datos"></p>
+<p id="calif"></p>
+<p id="tiempos"></p>
+<div id="detalle"></div>
+<button onclick="pdf()">PDF</button>
+</div>
+
+<div id="panel" class="hidden" style="padding:20px;">
+<h2>Panel Profesor</h2>
+<button onclick="exportar()">Exportar</button>
+
+<table id="tabla">
+<tr><th>Nombre</th><th>Cuenta</th><th>Calificación</th><th>Aciertos</th><th>Tiempo Total (s)</th></tr>
+</table>
+</div>
+
+<script>
+
+const preguntas = [
+["Reproducción sexual","Un progenitor","Dos progenitores","Clonación","Fisión","B"],
+["Asexual produce","Variabilidad","Mutaciones","Clones","Gametos","C"],
+["Fecundación","División","Unión gametos","ADN","Mitosis","B"],
+["Gametos","Mitosis","Meiosis","Fisión","Gemación","B"],
+["Ventaja sexual","Rapidez","Clonación","Variabilidad","Simple","C"],
+["Fisión","Sexual","Asexual","Mixta","Compleja","B"],
+["Gemación","Humanos","Plantas","Levaduras","Mamíferos","C"],
+["Asexual","Fecundación","Gametos","Sin gametos","Meiosis","C"],
+["Esporulación","Animales","Hongos","Humanos","Aves","B"],
+["Variabilidad","Clonación","Adaptación","Igualdad","Rapidez","B"],
+["Cigoto","Mitosis","Unión gametos","Gemación","Fisión","B"],
+["Asexual es","Lenta","Compleja","Rápida","Variable","C"],
+["Sexual participan","1","2","3","0","B"],
+["Fragmentación","Humanos","Estrella mar","Mamíferos","Aves","B"],
+["Sexual implica","Clones","Mezcla","Igual","Simple","B"],
+["Ventaja asexual","Variabilidad","Adaptación","Rapidez","Mutación","C"],
+["Meiosis","Asexual","Sexual","Fisión","Gemación","B"],
+["ADN asexual","Diferente","Mezclado","Igual","Reducido","C"],
+["Fecundación forma","Gametos","Cigoto","Esporas","Clones","B"],
+["Correcta","Sexual clones","Asexual variabilidad","Sexual variabilidad","Asexual gametos","C"]
+];
+
+let respuestas = new Array(preguntas.length).fill(null);
+let tiempos = new Array(preguntas.length).fill(0);
+
+let actual = 0;
+let tiempoTotal = preguntas.length * 65;
+let tiempoInicio = 0;
+let inter, interPregunta;
+
+// INICIO
+function iniciar(){
+if(!nombre.value || !cuenta.value){ alert("Completa datos"); return;}
+vista("examen");
+crearNav();
+mostrar();
+
+tiempoInicio = Date.now();
+timer();
+timerPregunta();
+}
+
+// TIMER GENERAL
+function timer(){
+inter=setInterval(()=>{
+tiempoTotal--;
+tiempo.innerText=tiempoTotal+" s";
+if(tiempoTotal<=0) terminar();
+},1000);
+}
+
+// TIMER POR PREGUNTA
+function timerPregunta(){
+interPregunta=setInterval(()=>{
+tiempos[actual]++;
+tiempoPregunta.innerText=tiempos[actual];
+},1000);
+}
+
+// CAMBIO PREGUNTA
+function cambiarPregunta(n){
+clearInterval(interPregunta);
+actual=n;
+mostrar();
+timerPregunta();
+}
+
+// NAV
+function crearNav(){
+nav.innerHTML="";
+preguntas.forEach((_,i)=>{
+let b=document.createElement("button");
+b.innerText=i+1;
+b.onclick=()=>cambiarPregunta(i);
+nav.appendChild(b);
+});
+}
+
+// MOSTRAR
+function mostrar(){
+pregunta.innerText=(actual+1)+". "+preguntas[actual][0];
+opciones.innerHTML="";
+["A","B","C","D"].forEach((l,i)=>{
+opciones.innerHTML+=`
+<label>
+<input type="radio" name="op" value="${l}"
+${respuestas[actual]==l?'checked':''}
+onclick="guardar('${l}')">
+${preguntas[actual][i+1]}
+</label><br>`;
+});
+}
+
+// GUARDAR
+function guardar(v){
+respuestas[actual]=v;
+nav.children[actual].classList.add("contestada");
+}
+
+function sig(){ if(actual<preguntas.length-1) cambiarPregunta(actual+1);}
+function ant(){ if(actual>0) cambiarPregunta(actual-1);}
+
+// TERMINAR
+function terminar(){
+clearInterval(inter);
+clearInterval(interPregunta);
+
+let aciertos=0;
+let detalleHTML="";
+
+preguntas.forEach((p,i)=>{
+let r=respuestas[i]||"-";
+if(r===p[5]) aciertos++;
+
+detalleHTML+=`<p class="${r===p[5]?'correcta':'incorrecta'}">
+${i+1}. ${r} | Correcta: ${p[5]} | Tiempo: ${tiempos[i]} s
+</p>`;
+});
+
+let cal=(aciertos/preguntas.length*10).toFixed(2);
+let tiempoFinal = Math.floor((Date.now()-tiempoInicio)/1000);
+
+// GUARDAR
+let lista=JSON.parse(localStorage.getItem("resultados")||"[]");
+lista.push({
+nombre:nombre.value,
+cuenta:cuenta.value,
+calificacion:cal,
+aciertos:aciertos,
+tiempoTotal:tiempoFinal
+});
+localStorage.setItem("resultados",JSON.stringify(lista));
+
+vista("resultado");
+
+datos.innerText=`${nombre.value} | ${cuenta.value}`;
+calif.innerText=`Calificación: ${cal} (${aciertos}/20)`;
+tiempos.innerText=`Tiempo total: ${tiempoFinal} s`;
+detalle.innerHTML=detalleHTML;
+}
+
+// PANEL
+function vista(v){
+inicio.classList.add("hidden");
+examen.classList.add("hidden");
+resultado.classList.add("hidden");
+panel.classList.add("hidden");
+document.getElementById(v).classList.remove("hidden");
+if(v==="panel") cargarPanel();
+}
+
+function cargarPanel(){
+let tabla=document.getElementById("tabla");
+tabla.innerHTML="<tr><th>Nombre</th><th>Cuenta</th><th>Calificación</th><th>Aciertos</th><th>Tiempo Total</th></tr>";
+
+let lista=JSON.parse(localStorage.getItem("resultados")||"[]");
+
+lista.forEach(a=>{
+tabla.innerHTML+=`<tr>
+<td>${a.nombre}</td>
+<td>${a.cuenta}</td>
+<td>${a.calificacion}</td>
+<td>${a.aciertos}</td>
+<td>${a.tiempoTotal}</td>
+</tr>`;
+});
+}
+
+// EXPORTAR
+function exportar(){
+let lista=JSON.parse(localStorage.getItem("resultados")||"[]");
+let csv="Nombre,Cuenta,Calificación,Aciertos,Tiempo\n";
+lista.forEach(a=>{
+csv+=`${a.nombre},${a.cuenta},${a.calificacion},${a.aciertos},${a.tiempoTotal}\n`;
+});
+let blob=new Blob([csv]);
+let link=document.createElement("a");
+link.href=URL.createObjectURL(blob);
+link.download="resultados.csv";
+link.click();
+}
+
+// PDF
+function pdf(){
+const {jsPDF}=window.jspdf;
+let doc=new jsPDF();
+
+doc.text("Resultado",10,10);
+doc.text(datos.innerText,10,20);
+doc.text(calif.innerText,10,30);
+doc.text(tiempos.innerText,10,40);
+
+let y=50;
+preguntas.forEach((p,i)=>{
+doc.text(`${i+1}. ${respuestas[i]||"-"} / ${p[5]} (${tiempos[i]}s)`,10,y);
+y+=7;
+});
+
+doc.save("resultado.pdf");
+}
+
+</script>
+
+</body>
+</html>
